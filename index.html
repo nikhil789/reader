@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dictation Web App</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      min-height: 100%;
+      overflow-x: hidden;
+      overflow-y: auto;
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
+    }
+
+    /* Fixed Top Navigation */
+    .top-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      background: white;
+      padding: 15px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .top-nav h2 {
+      margin: 0;
+      color: #333;
+      font-size: 1.2em;
+      text-align: center;
+    }
+
+    .nav-controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .control-group {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 5px;
+      font-size: 14px;
+    }
+
+    .button-group {
+      display: flex;
+      width: 100%;
+      max-width:300px;
+      margin: 0;
+    }
+
+    .button-group button {
+      flex: 0 0 33.33%;
+      max-width: 33.33%;
+      padding: 12px 8px;
+      font-size: 14px;
+      height: 48px;
+      margin: 0;
+      border-radius: 0;
+      cursor: pointer;
+    }
+
+    .button-group button:first-child {
+      border-top-left-radius: 4px;
+      border-bottom-left-radius: 4px;
+    }
+
+    .button-group button:last-child {
+      border-top-right-radius: 4px;
+      border-bottom-right-radius: 4px;
+    }
+
+    #playBtn { background-color: #28a745; color: white; }
+    #pauseBtn { background-color: #ffc107; color: black; }
+    #stopBtn { background-color: #dc3545; color: white; }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    .status-progress {
+      font-size: 14px;
+      color: #333;
+    }
+
+    .note {
+      background-color: #f0f0f0;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+
+    .banner {
+      background-color: #ffffff;
+      color: #1c1c1c;
+      font-size: 60px;
+      font-weight: bold;
+      padding: 10px 15px;
+      text-align: center;
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      word-wrap: break-word;
+      white-space: pre-wrap;
+    }
+
+    /* Main Content Below Nav */
+    .main-content {
+      margin-top: 240px; /* Match fixed nav height */
+      padding: 0 20px 60px; /* Add bottom padding */
+    }
+
+    /* Textarea Style */
+    #textInput {
+      width: 100%;
+      max-width: 900px;
+      min-height: 300px;
+      padding: 12px;
+      font-size: 20px;
+      resize: none;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      outline: none;
+      overflow: hidden;
+      transition: border-color 0.3s;
+      display: block;
+      margin: 0 auto;
+    }
+
+    #textInput:focus {
+      border-color: #007bff;
+    }
+
+    @media (max-width: 600px) {
+      .top-nav h2 {
+        font-size: 1rem;
+      }
+
+      .nav-controls {
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .banner {
+        font-size: 40px;
+        padding: 8px 10px;
+        min-height: 40px;
+      }
+
+      .control-group {
+        justify-content: center;
+      }
+
+      .main-content {
+        margin-top: 260px; /* Match fixed nav height */
+        padding: 0 20px 60px; /* Add bottom padding */
+      }
+
+      #textInput {
+        font-size: 18px;
+        min-height: 250px;
+      }
+
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Fixed Top Navigation Bar -->
+  <div class="top-nav">
+    <h2>Dictation App</h2>
+
+    <div class="nav-controls">
+      <div class="control-group">
+        <label for="delay">Time Gap (1–10 sec): </label>
+        <input type="number" id="delay" min="1" max="10" value="2" />
+      </div>
+
+      <div class="button-group">
+        <button id="playBtn">▶ Play</button>
+        <button id="pauseBtn">⏸ Pause</button>
+        <button id="stopBtn">⏹ Stop</button>
+      </div>
+
+      <div class="status-progress">
+        <div id="statusNote">📢 Speech Synthesis: Not Active</div>
+        <div id="progressNote">📖 Progress: 0 / 0 words</div>
+      </div>
+    </div>
+    <div class="banner">...</div>
+  </div>
+
+
+  <!-- Main Content Area -->
+  <div class="main-content">
+    <textarea id="textInput" placeholder="Type or paste your text here..."></textarea>
+  </div>
+
+  <script>
+    const textInput = document.getElementById('textInput');
+    const playBtn = document.getElementById('playBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const delayInput = document.getElementById('delay');
+
+    const statusNote = document.getElementById('statusNote');
+    const progressNote = document.getElementById('progressNote');
+
+    let words = [];
+    let currentIndex = 0;
+    let intervalId = null;
+    let timeoutId = null;
+    let currentDelay = 2;
+    let isPaused = false;
+
+    // Auto resize function
+    function autoGrow() {
+      textInput.style.height = 'auto';
+      textInput.style.height = textInput.scrollHeight + 'px';
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+      autoGrow();
+      textInput.addEventListener('input', autoGrow);
+      textInput.addEventListener('paste', () => setTimeout(autoGrow, 0));
+    });
+
+    function splitText(text) {
+      return text.split(/[,\.\s]+/).filter(word => word.trim() !== '');
+    }
+
+    function speakWord() {
+      if (isPaused || currentIndex >= words.length) return;
+
+      const word = words[currentIndex];
+      const utterance = new SpeechSynthesisUtterance(word);
+
+      if (/[\u0900-\u097F]/.test(word)) {
+        utterance.lang = 'hi-IN';
+      } else {
+        utterance.lang = 'en-US';
+      }
+
+      speechSynthesis.speak(utterance);
+      updateProgress();
+      currentIndex++;
+      document.querySelector('.banner').textContent = word;
+
+      if (currentIndex % 3 === 0 || currentIndex === words.length) {
+        clearInterval(intervalId);
+        intervalId = null;
+        if (currentIndex < words.length) {
+          timeoutId = setTimeout(startReadingFromIndex, currentDelay * 1000);
+        }
+      }
+    }
+
+    function startReadingFromIndex() {
+      if (isPaused || currentIndex >= words.length) return;
+      intervalId = setInterval(speakWord, 500);
+    }
+
+    function startReading() {
+      if (intervalId || timeoutId) return;
+
+      const text = textInput.value;
+      words = splitText(text);
+
+      if (words.length === 0) {
+        alert("No valid words found to read.");
+        return;
+      }
+
+      isPaused = false;
+      currentDelay = parseInt(delayInput.value) || 2;
+      updateStatus(true);
+      updateProgress();
+      startReadingFromIndex();
+    }
+
+    function pauseReading() {
+      isPaused = true;
+      clearInterval(intervalId);
+      clearTimeout(timeoutId);
+      intervalId = null;
+      timeoutId = null;
+      updateStatus(false);
+    }
+
+    function stopReading() {
+      isPaused = false;
+      clearInterval(intervalId);
+      clearTimeout(timeoutId);
+      intervalId = null;
+      timeoutId = null;
+      speechSynthesis.cancel();
+      currentIndex = 0;
+      words = [];
+      updateProgress();
+      updateStatus(false);
+      document.querySelector('.banner').textContent = "...";
+      statusNote.textContent = `📢 Speech Synthesis: Not Active`;
+    }
+
+    function updateStatus(isActive) {
+      statusNote.textContent = `📢 Speech Synthesis: ${isActive ? "Active" : "Paused"}`;
+    }
+
+    function updateProgress() {
+      progressNote.textContent = `📖 Progress: ${currentIndex} / ${words.length} words`;
+    }
+
+    playBtn.addEventListener('click', () => {
+      if (!intervalId && !timeoutId) {
+        startReading();
+      }
+    });
+
+    pauseBtn.addEventListener('click', pauseReading);
+    stopBtn.addEventListener('click', stopReading);
+
+    delayInput.addEventListener('change', () => {
+      currentDelay = parseInt(delayInput.value) || 2;
+    });
+  </script>
+</body>
+</html>
